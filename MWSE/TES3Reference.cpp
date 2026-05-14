@@ -117,12 +117,12 @@ namespace TES3 {
 		return TES3_Reference_addItemDataAttachment(this, data);
 	}
 
-	Vector3* Reference::getOrCreateOrientationFromAttachment() {
-		return reinterpret_cast<Vector3* (__thiscall *)(Reference*)>(0x4E5970)(this);
+	NI::Point3* Reference::getOrCreateOrientationFromAttachment() {
+		return reinterpret_cast<NI::Point3* (__thiscall *)(Reference*)>(0x4E5970)(this);
 	}
 
-	Vector3* Reference::getPositionFromAttachment() {
-		return reinterpret_cast<Vector3* (__thiscall *)(Reference*)>(0x4E58D0)(this);
+	NI::Point3* Reference::getPositionFromAttachment() {
+		return reinterpret_cast<NI::Point3* (__thiscall *)(Reference*)>(0x4E58D0)(this);
 	}
 
 	LockAttachmentNode* Reference::getOrCreateLockNode() {
@@ -201,11 +201,11 @@ namespace TES3 {
 			attachPoint->update();
 		}
 
-		auto attachment = mwse::tes3::_new<TES3::LightAttachment>();
+		auto attachment = se::memory::_new<TES3::LightAttachment>();
 		attachment->type = TES3::AttachmentType::Light;
 		attachment->next = nullptr;
 
-		attachmentNode = mwse::tes3::_new<TES3::LightAttachmentNode>();
+		attachmentNode = se::memory::_new<TES3::LightAttachmentNode>();
 		memset(attachmentNode, 0, sizeof(TES3::LightAttachmentNode));
 		attachmentNode->light = light;
 		attachmentNode->flickerPhase = phase_arg.value_or(0.0f);
@@ -379,15 +379,15 @@ namespace TES3 {
 
 	void Reference::setPositionFromLua(sol::stack_object value) {
 		// Is it a vector?
-		if (value.is<Vector3*>()) {
-			setPosition(value.as<Vector3*>());
+		if (value.is<NI::Point3*>()) {
+			setPosition(value.as<NI::Point3*>());
 		}
 		// Allow a simple table to be provided.
 		else if (value.get_type() == sol::type::table) {
 			// Get the values from the table.
 			sol::table positionTable = value.as<sol::table>();
 			if (positionTable.size() == 3) {
-				Vector3 pos(positionTable[1], positionTable[2], positionTable[3]);
+				NI::Point3 pos(positionTable[1], positionTable[2], positionTable[3]);
 				setPosition(&pos);
 			}
 		}
@@ -395,13 +395,13 @@ namespace TES3 {
 
 	void Reference::setOrientationFromLua(sol::stack_object value) {
 		// Is it a vector?
-		if (value.is<Vector3*>()) {
-			setOrientation(value.as<Vector3*>());
+		if (value.is<NI::Point3*>()) {
+			setOrientation(value.as<NI::Point3*>());
 		}
 		// Is it a matrix?
-		else if (value.is<Matrix33*>()) {
-			auto matrix = value.as<TES3::Matrix33*>();
-			Vector3 euler;
+		else if (value.is<NI::Matrix33*>()) {
+			auto matrix = value.as<NI::Matrix33*>();
+			NI::Point3 euler;
 			matrix->toEulerZYX(&euler.x, &euler.y, &euler.z);
 			setOrientation(&euler);
 		}
@@ -410,7 +410,7 @@ namespace TES3 {
 			// Get the values from the table.
 			sol::table positionTable = value.as<sol::table>();
 			if (positionTable.size() == 3) {
-				Vector3 ori(positionTable[1], positionTable[2], positionTable[3]);
+				NI::Point3 ori(positionTable[1], positionTable[2], positionTable[3]);
 				setOrientation(&ori);
 			}
 		}
@@ -435,7 +435,7 @@ namespace TES3 {
 			sceneNode->setAppCulled(false);
 		}
 
-		handleUpdate();
+		handleUpdate(false, true);
 
 		// Finally flag as modified.
 		setObjectModified(true);
@@ -457,7 +457,7 @@ namespace TES3 {
 			sceneNode->setAppCulled(true);
 		}
 
-		handleUpdate();
+		handleUpdate(true, true);
 
 		// Clean up any sounds.
 		auto sound = baseObject->getSound();
@@ -568,11 +568,11 @@ namespace TES3 {
 		clearIfThis(this, mwse::lua::event::ActivationTargetChangedEvent::ms_PreviousReference);
 	}
 
-	Vector3 * Reference::getPosition() {
+	NI::Point3 * Reference::getPosition() {
 		return &position;
 	}
 
-	void Reference::setPosition(const Vector3 * newPosition) {
+	void Reference::setPosition(const NI::Point3 * newPosition) {
 		// Check if the target position is in a different cell.
 		Cell * relocateCell = nullptr;
 		if (owningCollection.asReferenceList) {
@@ -610,7 +610,7 @@ namespace TES3 {
 		setObjectModified(true);
 	}
 
-	Vector3 * Reference::getOrientation() {
+	NI::Point3 * Reference::getOrientation() {
 		// NPCs and Creatures use the base orientation in the reference struct.
 		ObjectType::ObjectType type = baseObject->objectType;
 		if (type == ObjectType::NPC || type == ObjectType::Creature) {
@@ -621,9 +621,9 @@ namespace TES3 {
 		return getOrCreateOrientationFromAttachment();
 	}
 
-	void Reference::setOrientation(const Vector3 * newOrientation) {
+	void Reference::setOrientation(const NI::Point3 * newOrientation) {
 		// Orientation uses Euler ZYX angles.
-		Vector3 * orientationPackage = getOrientation();
+		NI::Point3 * orientationPackage = getOrientation();
 		*orientationPackage = *newOrientation;
 
 		if (orientationPackage != &orientation) {
@@ -631,7 +631,7 @@ namespace TES3 {
 		}
 
 		if (sceneNode) {
-			Matrix33 tempOutArg;
+			NI::Matrix33 tempOutArg;
 			sceneNode->setLocalRotationMatrix(updateSceneMatrix(&tempOutArg, false));
 			sceneNode->update();
 		}
@@ -639,28 +639,28 @@ namespace TES3 {
 		setObjectModified(true);
 	}
 
-	Matrix33 Reference::getRotationMatrix() {
+	NI::Matrix33 Reference::getRotationMatrix() {
 		if (sceneNode) {
 			return *sceneNode->localRotation;
 		}
-		Matrix33 rotation;
-		Vector3* orientation = getOrientation();
+		NI::Matrix33 rotation;
+		NI::Point3* orientation = getOrientation();
 		rotation.fromEulerXYZ(orientation->x, orientation->y, orientation->z);
 		return rotation;
 	}
 
-	Vector3 Reference::getForwardDirectionVector() {
-		Matrix33 rotation = getRotationMatrix();
+	NI::Point3 Reference::getForwardDirectionVector() {
+		NI::Matrix33 rotation = getRotationMatrix();
 		return rotation.getForwardVector().normalized();
 	}
 
-	Vector3 Reference::getRightDirectionVector() {
-		Matrix33 rotation = getRotationMatrix();
+	NI::Point3 Reference::getRightDirectionVector() {
+		NI::Matrix33 rotation = getRotationMatrix();
 		return rotation.getRightVector().normalized();
 	}
 
-	Vector3 Reference::getUpDirectionVector() {
-		Matrix33 rotation = getRotationMatrix();
+	NI::Point3 Reference::getUpDirectionVector() {
+		NI::Matrix33 rotation = getRotationMatrix();
 		return rotation.getUpVector().normalized();
 	}
 
@@ -669,13 +669,13 @@ namespace TES3 {
 	}
 
 	void Reference::setFacing(float rotation) {
-		Vector3 orientation(0, 0, rotation);
+		NI::Point3 orientation(0, 0, rotation);
 		setOrientation(&orientation);
 	}
 
 	float Reference::getAngleToReference(Reference* reference) {
 		auto rotation = getFacing();
-		Vector3 forward(sinf(rotation), cosf(rotation), 0.0f);
+		NI::Point3 forward(sinf(rotation), cosf(rotation), 0.0f);
 		return (*reference->getPosition() - *getPosition()).angle(&forward);
 	}
 
@@ -685,15 +685,15 @@ namespace TES3 {
 		return cell1->getIsInterior() ? (cell1 == cell2) : (!cell2->getIsInterior());
 	}
 
-	const auto TES3_Reference_setTravelDestination = reinterpret_cast<TravelDestination*(__thiscall*)(Reference*, const Vector3 *, const Vector3*)>(0x4E7B80);
-	TravelDestination * Reference::setTravelDestination(const Vector3 * position, const Vector3 * orientation, Cell * cell) {
+	const auto TES3_Reference_setTravelDestination = reinterpret_cast<TravelDestination*(__thiscall*)(Reference*, const NI::Point3 *, const NI::Point3*)>(0x4E7B80);
+	TravelDestination * Reference::setTravelDestination(const NI::Point3 * position, const NI::Point3 * orientation, Cell * cell) {
 		auto destination = TES3_Reference_setTravelDestination(this, position, orientation);
 		destination->cell = cell;
 		return destination;
 	}
 
-	Matrix33* Reference::updateSceneMatrix(Matrix33* matrix, bool eulerXYZ) {
-		return reinterpret_cast<Matrix33* (__thiscall *)(Reference*, Matrix33*, bool)>(0x4E8450)(this, matrix, eulerXYZ);
+	NI::Matrix33* Reference::updateSceneMatrix(NI::Matrix33* matrix, bool eulerXYZ) {
+		return reinterpret_cast<NI::Matrix33* (__thiscall *)(Reference*, NI::Matrix33*, bool)>(0x4E8450)(this, matrix, eulerXYZ);
 	}
 
 	bool Reference::getEmptyInventoryFlag() {
@@ -751,7 +751,7 @@ namespace TES3 {
 
 			if (lockData && lockData->trap) {
 				if (chance <= 0 || chance <= (mwse::tes3::rand() % 100)) {
-					dataHandler->addSoundById("Disarm Trap Fail", this, 0, worldController->audioController->getMixVolume(AudioMixType::Effects) * 250);
+					dataHandler->addSoundById("Disarm Trap Fail", this, 0, worldController->audioController->getMixVolumeRaw(AudioMixType::Effects));
 					if (chance <= 0) {
 						TES3::UI::showMessageBox(ndd->GMSTs[GMST::sTrapImpossible]->value.asString);
 					}
@@ -763,7 +763,7 @@ namespace TES3 {
 					lockData->trap = nullptr;
 					setObjectModified(true);
 					Game::get()->clearTarget();
-					dataHandler->addSoundById("Disarm Trap", this, 0, worldController->audioController->getMixVolume(AudioMixType::Effects) * 250);
+					dataHandler->addSoundById("Disarm Trap", this, 0, worldController->audioController->getMixVolumeRaw(AudioMixType::Effects));
 
 					auto macp = worldController->getMobilePlayer();
 					if (macp == disarmer) {
@@ -811,7 +811,7 @@ namespace TES3 {
 
 			if (lockData && lockData->lockLevel > 0) {
 				if (chance <= 0 || chance <= (mwse::tes3::rand() % 100)) {
-					dataHandler->addSoundById("Open Lock Fail", this, 0, worldController->audioController->getMixVolume(AudioMixType::Effects) * 250);
+					dataHandler->addSoundById("Open Lock Fail", this, 0, worldController->audioController->getMixVolumeRaw(AudioMixType::Effects));
 					if (chance <= 0) {
 						TES3::UI::showMessageBox(ndd->GMSTs[GMST::sLockImpossible]->value.asString);
 					}
@@ -823,7 +823,7 @@ namespace TES3 {
 					lockData->locked = false;
 					setObjectModified(true);
 					Game::get()->clearTarget();
-					dataHandler->addSoundById("Open Lock", this, 0, worldController->audioController->getMixVolume(AudioMixType::Effects) * 250);
+					dataHandler->addSoundById("Open Lock", this, 0, worldController->audioController->getMixVolumeRaw(AudioMixType::Effects));
 
 					auto macp = worldController->getMobilePlayer();
 					if (macp == disarmer) {
@@ -876,15 +876,24 @@ namespace TES3 {
 		}
 	}
 
-	void Reference::handleUpdate(bool updateCollisions) {
+	void Reference::handleUpdate(bool deletion, bool updateCollisions) {
 		const auto dataHandler = DataHandler::get();
+		const auto worldController = TES3::WorldController::get();
 
 		// Did we just make an actor? If so we need to add it to the mob manager.
 		if (baseObject->isMobileCapableActor()) {
-			TES3::WorldController::get()->mobManager->addMob(this);
+			worldController->mobManager->addMob(this);
 			const auto mact = getAttachedMobileActor();
 			if (mact && mact->isActor()) {
-				mact->enterLeaveSimulation(true);
+				if (deletion) {
+					worldController->mobManager->removeMob(this);
+
+					// This is normally done on death, but needs to be forced for deletion.
+					worldController->magicInstanceController->retireMagicCastedByActor(this);
+				}
+				else {
+					mact->enterLeaveSimulation(true);
+				}
 			}
 		}
 
@@ -892,8 +901,18 @@ namespace TES3 {
 			dataHandler->setDynamicLightingForReference(this);
 		}
 
+		// Deleted lights need to detach their affected nodes before the scene is cleaned up.
+		if (deletion && baseObject->objectType == TES3::ObjectType::Light) {
+			detachDynamicLightFromAffectedNodes();
+		}
+
 		if (updateCollisions && getUpdatesCollisionGroups()) {
 			dataHandler->updateCollisionGroupsForActiveCells();
+		}
+
+		// Retire any VFX attached to the reference.
+		if (deletion) {
+			worldController->vfxManager->removeForReference(this);
 		}
 
 		// Ensure the reference receives scene lighting.
@@ -980,7 +999,7 @@ namespace TES3 {
 		return &reinterpret_cast<Actor*>(baseObject)->inventory;
 	}
 
-	IteratedList<EquipmentStack*>* Reference::getEquipment() {
+	NI::IteratedList<EquipmentStack*>* Reference::getEquipment() {
 		// Only actors have equipment.
 		if (!baseObject->isActor()) {
 			return nullptr;
@@ -989,17 +1008,17 @@ namespace TES3 {
 		return &reinterpret_cast<Actor*>(baseObject)->equipment;
 	}
 
-	void __cdecl TES3_game_relocateReference_replacement(Reference* reference, Cell* cell, const Vector3* position, float rotationInDegrees) {
+	void __cdecl TES3_game_relocateReference_replacement(Reference* reference, Cell* cell, const NI::Point3* position, float rotationInDegrees) {
 		// Parameter guards.
 		if (!cell || !position) {
 			return;
 		}
 
 		// Recalculate rotation to always be between [0,2pi].
-		constexpr auto math2Pi = (mwse::math::M_PI * 2);
-		auto rotationInRadians = fmod(rotationInDegrees * (mwse::math::M_PI / 180.f), math2Pi);
+		constexpr auto math2Pi = (se::math::M_PI * 2);
+		auto rotationInRadians = static_cast<float>(fmod(rotationInDegrees * (se::math::M_PI / 180.f), math2Pi));
 		if (rotationInRadians < 0)
-			rotationInRadians += math2Pi;
+			rotationInRadians += static_cast<float>(math2Pi);
 
 		// Get reused variables.
 		auto dataHandler = TES3::DataHandler::get();
@@ -1021,7 +1040,7 @@ namespace TES3 {
 			// which may still be moved before ever being visited and cloned. getSceneGraphNode expects a clone actor.
 			auto sceneNode = reference->sceneNode;
 			if (sceneNode) {
-				Matrix33 rotationMatrix;
+				NI::Matrix33 rotationMatrix;
 				reference->updateSceneMatrix(&rotationMatrix, false);
 				sceneNode->setLocalRotationMatrix(&rotationMatrix);
 				sceneNode->localTranslate = *position;
@@ -1101,8 +1120,8 @@ namespace TES3 {
 		} while (reference);
 	}
 
-	const auto TES3_game_relocateReference = reinterpret_cast<void(__cdecl*)(Reference*, Cell*, const Vector3*, float)>(0x50EDD0);
-	void Reference::relocate(Cell * cell, const Vector3 * position, float rotation) {
+	const auto TES3_game_relocateReference = reinterpret_cast<void(__cdecl*)(Reference*, Cell*, const NI::Point3*, float)>(0x50EDD0);
+	void Reference::relocate(Cell * cell, const NI::Point3 * position, float rotation) {
 		// Store old cell.
 		const auto oldCell = getCell();
 
@@ -1120,16 +1139,16 @@ namespace TES3 {
 		}
 	}
 
-	void Reference::relocateNoRotation(Cell* cell, const Vector3* position) {
+	void Reference::relocateNoRotation(Cell* cell, const NI::Point3* position) {
 		// Save current rotation and restore it once relocate has finished.
-		Vector3 cachedOrientation = *getOrientation();
+		NI::Point3 cachedOrientation = *getOrientation();
 
 		// The orientation member may not be reliable (SetAngle bug), so calculate it manually.
 		if (sceneNode) {
 			sceneNode->localRotation->toEulerXYZ(&cachedOrientation);
 		}
 
-		relocate(cell, position, cachedOrientation.z * (180.0f / mwse::math::M_PI));
+		relocate(cell, position, static_cast<float>(cachedOrientation.z * (180.0f / se::math::M_PI)));
 
 		setOrientation(&cachedOrientation);
 	}
@@ -1382,7 +1401,7 @@ namespace TES3 {
 	}
 
 	void Reference::updateSceneGraph_lua() {
-		Matrix33 tempOutArg;
+		NI::Matrix33 tempOutArg;
 		sceneNode->setLocalRotationMatrix(updateSceneMatrix(&tempOutArg));
 		sceneNode->update();
 		setObjectModified(true);

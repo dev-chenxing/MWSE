@@ -1,7 +1,6 @@
 #pragma once
 
 #include "TES3Defines.h"
-#include "TES3HashMap.h"
 #include "TES3Stream.h"
 
 #include "TES3CriticalSection.h"
@@ -50,7 +49,8 @@ namespace TES3 {
 			unsigned int offsetInArchive; // 0x4
 
 			OffsetSizeData() = delete;
-			~OffsetSizeData() = delete;
+			// Destructible for template interoperability; instances remain engine-owned.
+			~OffsetSizeData() = default;
 		};
 		char path[128]; // 0xB0
 		unsigned int offsetToFileNameHashes; // 0x130

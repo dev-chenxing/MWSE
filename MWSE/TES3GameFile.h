@@ -2,8 +2,8 @@
 
 #include "TES3Defines.h"
 
-#include "TES3IteratedList.h"
-#include "TES3StlList.h"
+#include "NIIteratedList.h"
+#include "StlList.h"
 
 namespace TES3 {
 	struct GameFile {
@@ -32,8 +32,8 @@ namespace TES3 {
 		int errorCode; // 0x0
 		void* ioObjectBeforeSave; // 0x4
 		void* ioObject; // 0x8
-		char filename[260]; // 0xC
-		char path[260]; // 0x110
+		char filename[MAX_PATH]; // 0xC
+		char path[MAX_PATH]; // 0x110
 		void* field_214;
 		int field_218;
 		int field_21C;
@@ -57,13 +57,13 @@ namespace TES3 {
 		unsigned int countRecords; // 0x4D4
 		int flags_4D8;
 		int loadIndex; // 0x4DC
-		StlList<const char*>* masterNames; // 0x4E0
-		StlList<unsigned int>* masterFileSizes; // 0x4E4
+		se::StlList<const char*>* masterNames; // 0x4E0
+		se::StlList<unsigned int>* masterFileSizes; // 0x4E4
 		GameFile** arrayMasters; // 0x4E8
 		unsigned int highestFormID; // 0x4EC
 		GMDT gmdt; // 0x4F0
 		void* sgSaveImage; // 0x56C
-		IteratedList<void*>* list_570;
+		NI::IteratedList<void*>* list_570;
 
 		//
 		// Other related this-call functions.

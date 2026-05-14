@@ -454,7 +454,7 @@ function tes3.calculateChargeUse(params) end
 --- 
 --- `merchant`: tes3mobileActor|tes3mobileCreature|tes3mobileNPC|tes3mobilePlayer — The merchant to use for calculating the price.
 --- 
---- `bartering?`: boolean — *Default*: `false`. If `true`, a [calcBarterPrice](https://mwse.github.io/MWSE/events/calcBarterPrice) or [calcRepairPrice](https://mwse.github.io/MWSE/events/calcRepairPrice) event will be triggered.
+--- `bartering?`: boolean — *Default*: `false`. If `true`, a [calcBarterPrice](https://mwse.github.io/MWSE/events/calcBarterPrice) or [calcSpellPrice](https://mwse.github.io/MWSE/events/calcSpellPrice) event will be triggered.
 --- 
 --- `repairing?`: boolean — *Default*: `false`. If `true`, a [calcRepairPrice](https://mwse.github.io/MWSE/events/calcRepairPrice) event will be triggered.
 --- 
@@ -475,7 +475,7 @@ function tes3.calculatePrice(params) end
 --- @field buying? boolean *Default*: `true`. If `true`, uses the logic for buying a service/item. This is exclusive with `selling`.
 --- @field selling? boolean *Default*: `false`. If `true`, uses the logic for selling an item. This is exclusive with `buying`.
 --- @field merchant tes3mobileActor|tes3mobileCreature|tes3mobileNPC|tes3mobilePlayer The merchant to use for calculating the price.
---- @field bartering? boolean *Default*: `false`. If `true`, a [calcBarterPrice](https://mwse.github.io/MWSE/events/calcBarterPrice) or [calcRepairPrice](https://mwse.github.io/MWSE/events/calcRepairPrice) event will be triggered.
+--- @field bartering? boolean *Default*: `false`. If `true`, a [calcBarterPrice](https://mwse.github.io/MWSE/events/calcBarterPrice) or [calcSpellPrice](https://mwse.github.io/MWSE/events/calcSpellPrice) event will be triggered.
 --- @field repairing? boolean *Default*: `false`. If `true`, a [calcRepairPrice](https://mwse.github.io/MWSE/events/calcRepairPrice) event will be triggered.
 --- @field training? boolean *Default*: `false`. If `true`, a [calcTrainingPrice](https://mwse.github.io/MWSE/events/calcTrainingPrice) event will be triggered, passing the given `skill` ID.
 --- @field count? number *Default*: `1`. If `bartering`, the count passed to the [calcBarterPrice](https://mwse.github.io/MWSE/events/calcBarterPrice) event.
@@ -991,6 +991,10 @@ function tes3.get3rdPersonCameraOffset() end
 --- Returns a table of active cells. If indoors, the table will have only one entry. If outdoors, the 9 surrounding cells will be provided.
 --- @return tes3cell[] cells No description yet available.
 function tes3.getActiveCells() end
+
+--- Gets all active magic effect instances.
+--- @return tes3magicSourceInstance[] magicSourceInstances No description yet available.
+function tes3.getAllMagicSourceInstances() end
 
 --- This function fetches a dictionary of the timings of the action keys for a specific animation group on an actor. The actor is required, as different actors can use different animations. The result is a table with action names as keys, and timings as values. The function will return nil if the actor does not have that animation group, or if the actor's animations are not active.
 --- @param params tes3.getAnimationActionTiming.params This table accepts the following values:
@@ -1772,7 +1776,7 @@ function tes3.loopTArray(tarray) end
 --- Returns a safe handle for the object. To get the object use `:getObject()`. To check if it still exists use `:valid()`.
 ---
 --- [Examples available in online documentation](https://mwse.github.io/MWSE/apis/tes3/#tes3makesafeobjecthandle).
---- @param object tes3reference An object to make a safe handle for.
+--- @param object tes3activator|tes3alchemy|tes3apparatus|tes3armor|tes3baseObject|tes3birthsign|tes3bodyPart|tes3book|tes3cell|tes3class|tes3clothing|tes3container|tes3containerInstance|tes3creature|tes3creatureInstance|tes3dialogue|tes3dialogueInfo|tes3door|tes3enchantment|tes3faction|tes3gameSetting|tes3globalVariable|tes3ingredient|tes3land|tes3landTexture|tes3leveledCreature|tes3leveledItem|tes3light|tes3lockpick|tes3magicSourceInstance|tes3misc|tes3npc|tes3npcInstance|tes3pathGrid|tes3probe|tes3quest|tes3race|tes3reference|tes3region|tes3repairTool|tes3script|tes3skill|tes3sound|tes3soundGenerator|tes3spell|tes3startScript|tes3static|tes3weapon An object to make a safe handle for.
 --- @return mwseSafeObjectHandle safeObjectHandle No description yet available.
 function tes3.makeSafeObjectHandle(object) end
 
@@ -4002,6 +4006,7 @@ tes3.event = require("tes3.event")
 ---| `tes3.event.calcBarterPrice`
 ---| `tes3.event.calcBlockChance`
 ---| `tes3.event.calcChargenStats`
+---| `tes3.event.calcEnchantingSpellPointCost`
 ---| `tes3.event.calcEnchantmentPrice`
 ---| `tes3.event.calcFlySpeed`
 ---| `tes3.event.calcHitChance`
@@ -4082,7 +4087,11 @@ tes3.event = require("tes3.event")
 ---| `tes3.event.load`
 ---| `tes3.event.loaded`
 ---| `tes3.event.lockPick`
+---| `tes3.event.magicAbsorb`
 ---| `tes3.event.magicCasted`
+---| `tes3.event.magicEffectActivated`
+---| `tes3.event.magicEffectAdded`
+---| `tes3.event.magicEffectDeactivated`
 ---| `tes3.event.magicEffectRemoved`
 ---| `tes3.event.magicEffectsResolved`
 ---| `tes3.event.magicReflect`

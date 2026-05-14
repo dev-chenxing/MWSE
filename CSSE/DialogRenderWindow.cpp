@@ -59,8 +59,8 @@ namespace se::cs::dialog::render_window {
 
 	using gSnapGrid = memory::ExternalGlobal<int, 0x6CE9A8>;
 	using gSnapAngleInDegrees = memory::ExternalGlobal<int, 0x6CE9AC>;
-	using gCumulativeRotationValues = memory::ExternalGlobal<NI::Vector3, 0x6CF760>;
-	using gPreviousCumulativeRotationValues = memory::ExternalGlobal<NI::Vector3, 0x6CF4A8>;
+	using gCumulativeRotationValues = memory::ExternalGlobal<NI::Point3, 0x6CF760>;
+	using gPreviousCumulativeRotationValues = memory::ExternalGlobal<NI::Point3, 0x6CF4A8>;
 
 	using gRenderWindowPick = memory::ExternalGlobal<NI::Pick, 0x6CF528>;
 
@@ -189,7 +189,7 @@ namespace se::cs::dialog::render_window {
 		int mipmapSkipLevel; // 0x34
 		int presentationInterval; // 0x38
 		float gamma; // 0x3C
-		NI::Vector3 unknown_0x40;
+		NI::Point3 unknown_0x40;
 		NI::Pointer<NI::Node> node; // 0x4C
 		NI::Renderer* renderer; // 0x50
 		int unknown_0x54;
@@ -223,13 +223,13 @@ namespace se::cs::dialog::render_window {
 	float getHoveredSurfaceDistance() {
 		auto camera = RenderController::get()->camera;
 
-		NI::Vector3 origin;
-		NI::Vector3 direction;
+		NI::Point3 origin;
+		NI::Point3 direction;
 		if (!camera->windowPointToRay(lastCursorPosX, lastCursorPosY, origin, direction)) {
 			return 0.0;
 		}
 
-		NI::Vector3 intersection;
+		NI::Point3 intersection;
 		float zDistObject = 0.0f;
 		float zDistLandscape = 0.0f;
 
@@ -259,9 +259,9 @@ namespace se::cs::dialog::render_window {
 
 	struct CameraPanContext {
 		POINT initialCursorPosition;
-		NI::Vector3 initialPosition;
-		NI::Vector3 panDDX;
-		NI::Vector3 panDDY;
+		NI::Point3 initialPosition;
+		NI::Point3 panDDX;
+		NI::Point3 panDDY;
 
 		bool setup() {
 			auto camera = RenderController::get()->camera;
@@ -324,9 +324,9 @@ namespace se::cs::dialog::render_window {
 				}
 
 				// Calculate the vector from initial mouse position to current.
-				NI::Vector3 difference = (
-					context.panDDX * (cursorPos.x - context.initialCursorPosition.x) +
-					context.panDDY * (cursorPos.y - context.initialCursorPosition.y)
+				NI::Point3 difference = (
+					context.panDDX * (float)(cursorPos.x - context.initialCursorPosition.x) +
+					context.panDDY * (float)(cursorPos.y - context.initialCursorPosition.y)
 				);
 
 				// Apply camera movement.
@@ -378,46 +378,53 @@ namespace se::cs::dialog::render_window {
 
 		const auto rotationSpeed = gObjectRotate::get();
 		auto& cumulativeRot = gCumulativeRotationValues::get();
+
+		// Treat cumulativeRot as rotation vector (axis * angle)
+		// Add delta rotation along the chosen world axis
+		const float deltaAngle = relativeMouseDelta * rotationSpeed * 0.1f;
 		switch (rotationAxis) {
 		case SelectionData::RotationAxis::X:
 			widgets->setAxis(WidgetsAxis::X);
-			cumulativeRot.x += relativeMouseDelta * rotationSpeed * 0.1f;
+			cumulativeRot.x += deltaAngle;
 			break;
 		case SelectionData::RotationAxis::Y:
 			widgets->setAxis(WidgetsAxis::Y);
-			cumulativeRot.y += relativeMouseDelta * rotationSpeed * 0.1f;
+			cumulativeRot.y += deltaAngle;
 			break;
 		case SelectionData::RotationAxis::Z:
 			widgets->setAxis(WidgetsAxis::Z);
-			cumulativeRot.z += relativeMouseDelta * rotationSpeed * 0.1f;
+			cumulativeRot.z += deltaAngle;
 			break;
 		}
 
 		const auto snapAngle = math::degreesToRadians((float)gSnapAngleInDegrees::get());
 		const bool isSnapping = (isControlDown() || isAngleSnapping()) && (snapAngle != 0.0f);
 
-		NI::Vector3 orientation = cumulativeRot;
-		if (isSnapping) {
-			orientation.x = std::roundf(orientation.x / snapAngle) * snapAngle;
-			orientation.y = std::roundf(orientation.y / snapAngle) * snapAngle;
-			orientation.z = std::roundf(orientation.z / snapAngle) * snapAngle;
+		// Treat cumulativeRot as rotation vector (axis * angle)
+		float rawAngle = cumulativeRot.length();
+		NI::Point3 axis(0.0f, 0.0f, 1.0f);  // Default to Z axis
+
+		if (rawAngle > 0.0001f) {
+			axis = cumulativeRot / rawAngle;
 		}
 
-		// Due to snapping these may have been set to 0, in which case no need to do anything else.
-		if (orientation.x == 0.0f
-			&& orientation.y == 0.0f
-			&& orientation.z == 0.0f)
-		{
+		// Snap the angle magnitude, not individual components
+		float snappedAngle = rawAngle;
+		if (isSnapping && rawAngle > 0.0001f) {
+			snappedAngle = std::roundf(rawAngle / snapAngle) * snapAngle;
+		}
+
+		// Early exit if no rotation to apply
+		if (snappedAngle < 0.0001f) {
 			return 0;
 		}
 
-		// Restart accumulating process.
-		cumulativeRot.x = 0;
-		cumulativeRot.y = 0;
-		cumulativeRot.z = 0;
+		// Subtract the applied rotation from accumulator (preserve remainder for smooth feedback)
+		cumulativeRot = axis * (rawAngle - snappedAngle);
 
+		// Build rotation directly from axis-angle (NO Euler roundtrip!)
 		NI::Matrix33 userRotation;
-		userRotation.fromEulerXYZ(orientation.x, orientation.y, orientation.z);
+		userRotation.toRotation(snappedAngle, axis);
 
 		for (auto target = selectionData->firstTarget; target; target = target->next) {
 			auto reference = target->reference;
@@ -434,7 +441,8 @@ namespace se::cs::dialog::render_window {
 				auto& oldRotation = *reference->sceneNode->localRotation;
 				auto newRotation = userRotation * oldRotation;
 
-				// Slightly modified toEulerXYZ that does not do factorization.
+				// Extract Euler angles for reference orientation storage.
+				NI::Point3 orientation;
 				{
 					orientation.y = asin(-newRotation.m0.z);
 					if (cos(orientation.y) != 0) {
@@ -445,28 +453,6 @@ namespace se::cs::dialog::render_window {
 						orientation.x = atan2(newRotation.m2.x, newRotation.m2.y);
 						orientation.z = 0;
 					};
-				}
-
-				if (isSnapping && (target == selectionData->firstTarget)) {
-					// Snapping the new rotation after adjustments were applied.
-					// So we must only snap the *current* axis and not all them.
-					switch (rotationAxis) {
-					case SelectionData::RotationAxis::X:
-						orientation.x = std::roundf(orientation.x / snapAngle) * snapAngle;
-						break;
-					case SelectionData::RotationAxis::Y:
-						orientation.y = std::roundf(orientation.y / snapAngle) * snapAngle;
-						break;
-					case SelectionData::RotationAxis::Z:
-						orientation.z = std::roundf(orientation.z / snapAngle) * snapAngle;
-						break;
-					}
-
-					// Ensure the matrix is also snapped.
-					newRotation.fromEulerXYZ(orientation.x, orientation.y, orientation.z);
-
-					// Ensure all targets use the snapped rotation.
-					userRotation = newRotation * oldRotation.transpose();
 				}
 
 				math::standardizeAngleRadians(orientation.x);
@@ -571,43 +557,61 @@ namespace se::cs::dialog::render_window {
 		return node->getLowestVertexZ();
 	}
 
-	void __cdecl Patch_FixDropToSurface_GetLowVertices(const NI::Node* node, float nearToZ) {
+	void __cdecl Patch_FixDropToSurface_GetLowVertices(const NI::AVObject* object, float nearToZ) {
 		constexpr auto NEAR_THRESHOLD = 1.0f;
-		const auto gNearVertexArray = *reinterpret_cast<NI::TArray<NI::Vector3*>**>(0x6CF7C4);
+		const auto gNearVertexArray = *reinterpret_cast<NI::TArray<NI::Point3*>**>(0x6CF7C4);
 
-		for (const auto& child : node->children) {
-			if (child) {
-				// Calculate for geometry.
-				if (child->isInstanceOfType(NI::RTTIStaticPtr::NiTriBasedGeom)) {
-					auto asGeometry = static_cast<const NI::Geometry*>(child.get());
-
-					// Ignore particles.
-					if (asGeometry->isInstanceOfType(NI::RTTIStaticPtr::NiParticles)) {
-						continue;
-					}
-
-					// Add nearby vertices.
-					for (auto i = 0u; i < asGeometry->modelData->vertexCount; ++i) {
-						const auto vertex = &asGeometry->worldVertices[i];
-						if (std::abs(vertex->z - nearToZ) <= NEAR_THRESHOLD) {
-							gNearVertexArray->push_back(vertex);
-						}
-					}
-
-					continue;
-				}
-
-				// Recursively call for child nodes.
-				if (child->isInstanceOfType(NI::RTTIStaticPtr::NiNode)) {
-					auto asNode = static_cast<const NI::Node*>(child.get());
-					Patch_FixDropToSurface_GetLowVertices(asNode, nearToZ);
-					continue;
-				}
+		auto processChild = [&](const NI::AVObject* child) {
+			if (!child) {
+				return;
 			}
+
+			// Calculate for geometry.
+			if (child->isInstanceOfType(NI::RTTIStaticPtr::NiTriBasedGeom)) {
+				auto asGeometry = static_cast<const NI::Geometry*>(child);
+
+				// Ignore particles.
+				if (asGeometry->isInstanceOfType(NI::RTTIStaticPtr::NiParticles)) {
+					return;
+				}
+
+				// Add nearby vertices.
+				for (auto i = 0u; i < asGeometry->modelData->vertexCount; ++i) {
+					const auto vertex = &asGeometry->worldVertices[i];
+					if (std::abs(vertex->z - nearToZ) <= NEAR_THRESHOLD) {
+						gNearVertexArray->push_back(vertex);
+					}
+				}
+
+				return;
+			}
+
+			// Recursively call for child nodes.
+			if (child->isInstanceOfType(NI::RTTIStaticPtr::NiNode)) {
+				Patch_FixDropToSurface_GetLowVertices(child, nearToZ);
+				return;
+			}
+		};
+
+		// For NiSwitchNode, only process the active child. 
+		// The "UpdateOnlyActive" flag prevents updates on inactive children.
+		if (object->isInstanceOfType(NI::RTTIStaticPtr::NiSwitchNode)) {
+			const auto asSwitchNode = static_cast<const NI::SwitchNode*>(object);
+			const auto child = asSwitchNode->getActiveChild();
+			processChild(child);
+			return;
+		}
+
+		if (object->isInstanceOfType(NI::RTTIStaticPtr::NiNode)) {
+			const auto asNode = static_cast<const NI::Node*>(object);
+			for (const auto& child : asNode->children) {
+				processChild(child);
+			}
+			return;
 		}
 	}
 
-	bool __fastcall Patch_FixDropToSurface_PickObjects(NI::Pick* pick, DWORD _EDX_, NI::Vector3* origin, NI::Vector3* direction, bool append, float maxDistance) {
+	bool __fastcall Patch_FixDropToSurface_PickObjects(NI::Pick* pick, DWORD _EDX_, NI::Point3* origin, NI::Point3* direction, bool append, float maxDistance) {
 		// Perform pick with skin deforms instead.
 		return pick->pickObjectsWithSkinDeforms(origin, direction, append, maxDistance);
 	}
@@ -656,8 +660,8 @@ namespace se::cs::dialog::render_window {
 		auto reference = selectionData->firstTarget->reference;
 		reference->sceneNode->setAppCulled(true);
 
-		NI::Vector3 origin;
-		NI::Vector3 direction;
+		NI::Point3 origin;
+		NI::Point3 direction;
 		if (rendererController->camera->windowPointToRay(lastCursorPosX, lastCursorPosY, origin, direction)) {
 			direction.normalize();
 
@@ -674,26 +678,26 @@ namespace se::cs::dialog::render_window {
 					reference->setAsEdited();
 
 					// Set position.
-					NI::Vector3 offset;
+					NI::Point3 offset;
 					const auto scale = reference->getScale();
 					switch (refSnappingAxis) {
 					case SnappingAxis::POSITIVE_X:
-						offset = firstResult->normal * std::abs(object->boundingBox.min.x) * scale;
+						offset = firstResult->normal * std::abs(object->boundingBox.minimum.x) * scale;
 						break;
 					case SnappingAxis::NEGATIVE_X:
-						offset = firstResult->normal * std::abs(object->boundingBox.max.x) * scale;
+						offset = firstResult->normal * std::abs(object->boundingBox.maximum.x) * scale;
 						break;
 					case SnappingAxis::POSITIVE_Y:
-						offset = firstResult->normal * std::abs(object->boundingBox.min.y) * scale;
+						offset = firstResult->normal * std::abs(object->boundingBox.minimum.y) * scale;
 						break;
 					case SnappingAxis::NEGATIVE_Y:
-						offset = firstResult->normal * std::abs(object->boundingBox.max.y) * scale;
+						offset = firstResult->normal * std::abs(object->boundingBox.maximum.y) * scale;
 						break;
 					case SnappingAxis::POSITIVE_Z:
-						offset = firstResult->normal * std::abs(object->boundingBox.min.z) * scale;
+						offset = firstResult->normal * std::abs(object->boundingBox.minimum.z) * scale;
 						break;
 					case SnappingAxis::NEGATIVE_Z:
-						offset = firstResult->normal * std::abs(object->boundingBox.max.z) * scale;
+						offset = firstResult->normal * std::abs(object->boundingBox.maximum.z) * scale;
 						break;
 					}
 
@@ -705,7 +709,7 @@ namespace se::cs::dialog::render_window {
 
 					// Set rotation.
 					if (object->canRotateOnAllAxes()) {
-						NI::Vector3 orientation;
+						NI::Point3 orientation;
 						switch (refSnappingAxis) {
 						case SnappingAxis::POSITIVE_X:
 						case SnappingAxis::NEGATIVE_X:
@@ -781,8 +785,8 @@ namespace se::cs::dialog::render_window {
 	}
 
 	struct MovementContext {
-		NI::Vector3 basePosition;
-		NI::Vector3 cursorOffset;
+		NI::Point3 basePosition;
+		NI::Point3 cursorOffset;
 	};
 	static auto movementContext = std::optional<MovementContext>();
 
@@ -809,8 +813,8 @@ namespace se::cs::dialog::render_window {
 		}
 
 		// Calculate raycast origin/direction from cursor.
-		NI::Vector3 rayOrigin;
-		NI::Vector3 rayDirection;
+		NI::Point3 rayOrigin;
+		NI::Point3 rayDirection;
 		auto camera = RenderController::get()->camera;
 		if (!camera->windowPointToRay(lastCursorPosX, lastCursorPosY, rayOrigin, rayDirection)) {
 			return 0;
@@ -821,7 +825,7 @@ namespace se::cs::dialog::render_window {
 		
 		// Calculate the plane that we will raycast against.
 		auto planeOrigin = selectionData->bound.center;
-		auto planeNormal = NI::Vector3(0, 0, 1);
+		auto planeNormal = NI::Point3(0, 0, 1);
 
 		// Preserve the cursor offset and starting position.
 		if (!movementContext.has_value()) {
@@ -833,7 +837,7 @@ namespace se::cs::dialog::render_window {
 			}
 			else {
 				context.basePosition = planeOrigin;
-				context.cursorOffset = NI::Vector3();
+				context.cursorOffset = NI::Point3();
 			}
 			movementContext = std::move(context);
 		}
@@ -975,8 +979,8 @@ namespace se::cs::dialog::render_window {
 	//
 
 	Reference* __cdecl Patch_FixPickAgainstSkinnedObjects(SceneGraphController* sgController, RenderController* renderController, int screenX, int screenY) {
-		NI::Vector3 origin;
-		NI::Vector3 direction;
+		NI::Point3 origin;
+		NI::Point3 direction;
 		if (!renderController->camera->windowPointToRay(screenX, screenY, origin, direction)) {
 			return nullptr;
 		}
@@ -1196,8 +1200,8 @@ namespace se::cs::dialog::render_window {
 		auto rendererController = RenderController::get();
 		auto sceneGraphController = SceneGraphController::get();
 
-		NI::Vector3 origin;
-		NI::Vector3 direction;
+		NI::Point3 origin;
+		NI::Point3 direction;
 		if (!rendererController->camera->windowPointToRay(lastCursorPosX, lastCursorPosY, origin, direction)) {
 			return nullptr;
 		}
@@ -1443,7 +1447,7 @@ namespace se::cs::dialog::render_window {
 			quickstart.position[2] = renderController->camera->worldTransform.translation.z;
 
 			// Store camera orientation as euler angle.
-			NI::Vector3 orientationVector;
+			NI::Point3 orientationVector;
 			renderController->node->getLocalRotationMatrix()->toEulerXYZ(&orientationVector);
 			quickstart.orientation[0] = orientationVector.x;
 			quickstart.orientation[1] = orientationVector.y;
@@ -2174,7 +2178,7 @@ namespace se::cs::dialog::render_window {
 			if (gIsRotating::get()) {
 				widgets->updateAngleGuideGeometry(
 					sceneNode->worldBoundRadius,
-					gSnapAngleInDegrees::get()
+					(float)gSnapAngleInDegrees::get()
 				);
 				widgets->updateAngleGuidePosition(
 					sceneNode->localTranslate,
@@ -2363,9 +2367,9 @@ namespace se::cs::dialog::render_window {
 	}
 
 	void focusReference(const Reference* reference) {
-		const auto CS_DataHandler_403A8F = reinterpret_cast<void(__thiscall*)(DataHandler*, Cell*, const NI::Vector3*)>(0x403A8F);
-		const auto CS_DataHandler_4034B8 = reinterpret_cast<void(__thiscall*)(DataHandler*, const NI::Vector3*)>(0x4034B8);
-		const auto CS_SendCommandToLoadCell = reinterpret_cast<void(__cdecl*)(const NI::Vector3*, const Reference*)>(0x403A12);
+		const auto CS_DataHandler_403A8F = reinterpret_cast<void(__thiscall*)(DataHandler*, Cell*, const NI::Point3*)>(0x403A8F);
+		const auto CS_DataHandler_4034B8 = reinterpret_cast<void(__thiscall*)(DataHandler*, const NI::Point3*)>(0x4034B8);
+		const auto CS_SendCommandToLoadCell = reinterpret_cast<void(__cdecl*)(const NI::Point3*, const Reference*)>(0x403A12);
 
 		const auto dataHandler = DataHandler::get();
 		const auto cell = reference->getCell();
